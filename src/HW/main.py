@@ -1,5 +1,4 @@
 from flask import Flask, make_response, request
-from mongoengine import ConnectionFailure
 from pymongo import MongoClient
 
 import distanceServer3
@@ -22,16 +21,20 @@ def get_health():
         db = client["synamedia"]
         db["Distances"]
         return make_response({}, 200)
-    except Exception :
+    except:
         return make_response({"error": "the connection to mongo is unavailable"}, 500)
 
 
 @app.route("/distance", methods=['GET'])
 def get_distance():
     dist = 0
-    source = request.args.get("source")
-    destination = request.args.get("destination")
-    source, destination = sortName(source, destination)
+    try:
+        source = request.args.get("source")
+        destination = request.args.get("destination")
+        source, destination = sortName(source, destination)
+    except Exception:
+        return make_response(
+            {"error": "The format should be as follows: /distance?source=YourSource&destination=YourDestination"}, 500)
     get_health()
     res = find_in_db(source, destination)
     if res:  # find in database
@@ -51,13 +54,11 @@ def get_distance():
 
 @app.route("/popularsearch", methods=['GET'])
 def get_popularsearch():
-    max_hit = 0
-    max_val = {}
+    max_hit, max_val = 0, {}
     get_health()
     for i in db["Distances"].find():
         if i.get("hits", False) > max_hit:
-            max_hit = i["hits"]
-            max_val = i
+            max_hit, max_val = i["hits"], i
 
     return make_response({"source": max_val["source"], "destination": max_val["destination"], "hits": max_val["hits"]},
                          200)
@@ -91,9 +92,9 @@ def post_distance():
 # in the database always source < destination
 def sortName(source, destination):
     if source <= destination:
-        return (source, destination)
+        return source, destination
     else:
-        return (destination, source)
+        return destination, source
 
 
 def find_in_db(source, destination):
