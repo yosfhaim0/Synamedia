@@ -1,4 +1,5 @@
-from flask import Flask, make_response, request
+import pymongo
+from flask import Flask, make_response, request, redirect
 # from api_constants import mongodb_password
 from pymongo import MongoClient
 
@@ -46,6 +47,7 @@ def get_distance():
         c = res['distance']
         # oldhit=res['hits']
         db["Distances"].update_one({'source': source, 'destination': destination}, {'$set': {'hits': res['hits'] + 1}})
+        db["Distances"].update_one({'source': destination, 'destination': source}, {'$set': {'hits': res['hits'] + 1}})
         return make_response({"distance": str(c)}, 200)
     else:  # not found
         res = distanceServer3.dis(source, destination)
@@ -55,7 +57,24 @@ def get_distance():
 
 @app.route("/popularsearch", methods=['GET'])
 def get_popularsearch():
-    db["Distances"].aggregate()
+    c= db["Distances"].find_one().sort({'hits':-1}).limit(1)
+    return make_response({"response": str(c)}, 200)
+
+# @app.route("/dista", methods=['GET'])
+# def set_dista():
+#     source = request.args.get("source")
+#     destination = request.args.get("destination")
+#     distance=request.args.get("distance")
+#     res=db["Distances"].insert_one({'source': source, 'destination': destination, 'distance': distance})
+#     return make_response({'source': source, 'destination': destination, "distance": distance,"hits": res["hits"]}, 200)
+
+#to manage json data in a request you have to use the get_json request method.
+@app.route("/dista", methods=["POST"])
+def dista():
+    data = request.get_json()
+    # use data
+    c=data["source"]
+    return redirect("/")
 
 
 if __name__ == "__main__":
