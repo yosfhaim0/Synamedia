@@ -1,8 +1,8 @@
 from geopy import distance
 from geopy.geocoders import Nominatim
 
-
-def dis(c1,c2):
+# Calculates distance between two cities and returns distance in kilometer
+def distance_between_cities(c1,c2):
     geolocator = Nominatim(user_agent="geoapi Exercises")
     # These variables have the exact Location of the cities.
     l1 = geolocator.geocode(c1)
