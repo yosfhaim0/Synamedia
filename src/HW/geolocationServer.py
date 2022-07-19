@@ -1,3 +1,5 @@
+import asyncio
+
 from flask import Flask, make_response, request
 from pymongo import MongoClient
 
@@ -17,29 +19,33 @@ def get_hello():
 # get the distance in KM between a source and destination
 @app.route("/distance", methods=['GET'])
 def get_distance():
-    dist = 0
+    source = request.args.get("source")
+    destination = request.args.get("destination")
     try:
-        source = request.args.get("source")
-        destination = request.args.get("destination")
         source, destination = sortName(source, destination)
-    except TypeError:
+    except TypeError as err:
         return make_response(
-            {"error": "The format should be as follows: /distance?source=YourSource&destination=YourDestination"}, 500)
-    get_health()
-    res = find_in_db(source, destination)
-    if res:  # find in database
-        dist = res['distance']
-        db["Distances"].update_one({'source': source, 'destination': destination}, {'$set': {'hits': res['hits'] + 1}})
-        return make_response({"distance": str(dist)}, 200)
-    else:  # not found in database
-        try:
-            dist = distanceCalculator.distance_between_cities(source, destination)
-        except:
-            return make_response({
-                "error": "Something didn't work well with the calculation of the distance between the cities, are you sure the two cities you entered exist?"},
-                500)
-        insert_one(source, destination, dist)
-        return make_response({"distance": dist}, 200)
+            {
+                "error": "The format should be as follows: /distance?source=YourSource&destination=YourDestination" + "or " + str(
+                    err)}, 500)
+    try:
+        res = find_in_db(source, destination)
+        if res: # find in database
+            dist = res['distance']
+            db["Distances"].update_one({'source': source, 'destination': destination},
+                                                   {'$set': {'hits': res['hits'] + 1}})
+            return make_response({"distance": str(dist)}, 200)
+        else:  # not found in database
+            try:
+                dist = distanceCalculator.distance_between_cities(source, destination)
+            except:
+                return make_response({
+                    "error": "Something didn't work well with the calculation of the distance between the cities, are you sure the two cities you entered exist?"},
+                    500)
+            insert_one(source, destination, dist)
+            return make_response({"distance": dist}, 200)
+    except:
+        return make_response({"error": "db unavailable"}, 500)
 
 
 # The /health API is responsible for determining the status of the connection to the DB
@@ -58,10 +64,12 @@ def get_health():
 @app.route("/popularsearch", methods=['GET'])
 def get_popularsearch():
     max_hit, max_val = 0, {}
-    get_health()
-    for i in db["Distances"].find():
-        if i.get("hits", False) > max_hit:
-            max_hit, max_val = i["hits"], i
+    try:
+        for i in db["Distances"].find():
+            if i.get("hits", False) > max_hit:
+                max_hit, max_val = i["hits"], i
+    except:
+        return make_response({"error": "db unavailable"}, 500)
     if max_val == {}:
         return make_response({"error": "No valid result returned, probably the collection is empty"}, 500)
     return make_response({"source": max_val["source"], "destination": max_val["destination"], "hits": max_val["hits"]},
@@ -81,24 +89,33 @@ def post_distance():
         return make_response({
             "error": 'your json file format: {"source": "YourSource", "destination": "YourDestination", "distance": Yourdistance} and '},
             500)
+    except TypeError as err:
+        make_response({
+            "error": str(err)},
+            500)
     except Exception:
         return make_response({"error": "you should add legal json file to the body post request"}, 500)
-    get_health()
-    res = find_in_db(source, destination)
-    if res:
-        db["Distances"].update_one({'source': source, 'destination': destination, "hits": res["hits"]},
-                                   {'$set': {'distance': distance}})
-        return make_response({'source': source, 'destination': destination,
-                              "hits": res['hits']}, 200)
-    else:
-        db["Distances"].insert_one(
-            {'source': source, 'destination': destination, 'distance': distance, 'hits': 1})
-        return make_response({'source': source, 'destination': destination,
-                              "hits": 1}, 200)
+
+    try:
+        res = find_in_db(source, destination)
+        if res:
+            db["Distances"].update_one({'source': source, 'destination': destination, "hits": res["hits"]},
+                                                   {'$set': {'distance': distance}})
+            return make_response({'source': source, 'destination': destination,
+                                  "hits": res['hits']}, 200)
+        else:
+            db["Distances"].insert_one(
+                {'source': source, 'destination': destination, 'distance': distance, 'hits': 1})
+            return make_response({'source': source, 'destination': destination,
+                                  "hits": 1}, 200)
+    except:
+        return make_response({"error": "db unavailable"}, 500)
 
 
 # in the database always source < destination
 def sortName(source, destination):
+    if not (source.isalpha() or source.isalpha()):
+        raise TypeError("Only string contain alphabet allowed!")
     if source <= destination:
         return source, destination
     else:
@@ -109,7 +126,7 @@ def find_in_db(source, destination):
     return db["Distances"].find_one({'source': source, 'destination': destination})
 
 
-def insert_one(source, destination, dist, hits=1):
+async def insert_one(source, destination, dist, hits=1):
     db["Distances"].insert_one({'source': source, 'destination': destination, 'distance': dist, 'hits': hits})
 
 
